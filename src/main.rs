@@ -363,8 +363,10 @@ impl Game {
         self.lock_and_spawn();
     }
 
-    fn soft_drop(&mut self) -> bool {
-        self.move_piece(0, 1)
+    fn soft_drop(&mut self) {
+        if !self.move_piece(0, 1) {
+            self.lock_and_spawn();
+        }
     }
 
     fn lock_and_spawn(&mut self) {
