@@ -418,13 +418,22 @@ fn render_game(frame: &mut Frame, game: &Game, area: Rect) {
     // Center everything
     let main_area = centered_rect(total_width, total_height, area);
 
+    // Split vertically first: game area and controls
+    let vertical = Layout::vertical([
+        Constraint::Length(grid_display_height),
+        Constraint::Fill(1),
+    ])
+    .split(main_area);
+
+    let game_row = vertical[0];
+
     // Layout: [Grid][Preview][Info]
     let horizontal = Layout::horizontal([
         Constraint::Length(grid_display_width),
         Constraint::Length(preview_width),
         Constraint::Length(info_width),
     ])
-    .split(main_area);
+    .split(game_row);
 
     // Render game grid
     render_grid(frame, game, horizontal[0]);
@@ -438,7 +447,7 @@ fn render_game(frame: &mut Frame, game: &Game, area: Rect) {
     // Render controls hint below
     let controls_area = Rect {
         x: area.x,
-        y: main_area.y + main_area.height,
+        y: game_row.y + game_row.height,
         width: area.width,
         height: 2,
     };
@@ -520,11 +529,11 @@ fn render_preview(frame: &mut Frame, game: &Game, area: Rect) {
         // Find bounding box
         let max_y = shape.iter().map(|(_, y)| *y).max().unwrap_or(0);
 
-        for y in 0..=max_y {
+        for y in 0i16..=max_y {
             let mut spans: Vec<Span> = Vec::new();
             spans.push(Span::raw(" "));
 
-            for x in 0..4 {
+            for x in 0i16..4i16 {
                 if shape.contains(&(x, y)) {
                     spans.push(Span::styled(BLOCK_CHAR, Style::default().fg(color)));
                 } else {
