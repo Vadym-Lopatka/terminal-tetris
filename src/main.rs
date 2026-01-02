@@ -454,7 +454,7 @@ fn render_game(frame: &mut Frame, game: &Game, area: Rect) {
 
     if controls_area.y + 1 < area.height {
         let controls = Paragraph::new(vec![
-            Line::from("WASD: Move/Drop | ←→: Rotate | ESC: Quit"),
+            Line::from("WASD/JK: Move/Drop | ←→/HL: Rotate | Q/ESC: Quit"),
         ])
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::DarkGray));
@@ -659,23 +659,23 @@ fn main() -> io::Result<()> {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
                     match key.code {
-                        KeyCode::Esc => break,
+                        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => break,
                         KeyCode::Char('a') | KeyCode::Char('A') => {
                             game.move_piece(-1, 0);
                         }
                         KeyCode::Char('d') | KeyCode::Char('D') => {
                             game.move_piece(1, 0);
                         }
-                        KeyCode::Char('s') | KeyCode::Char('S') => {
+                        KeyCode::Char('s') | KeyCode::Char('S') | KeyCode::Char('j') | KeyCode::Char('J') => {
                             game.soft_drop();
                         }
-                        KeyCode::Char('w') | KeyCode::Char('W') => {
+                        KeyCode::Char('w') | KeyCode::Char('W') | KeyCode::Char('k') | KeyCode::Char('K') => {
                             game.hard_drop();
                         }
-                        KeyCode::Left => {
+                        KeyCode::Left | KeyCode::Char('h') | KeyCode::Char('H') => {
                             game.rotate_piece(false); // Counter-clockwise
                         }
-                        KeyCode::Right => {
+                        KeyCode::Right | KeyCode::Char('l') | KeyCode::Char('L') => {
                             game.rotate_piece(true); // Clockwise
                         }
                         _ => {}
