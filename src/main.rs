@@ -3,7 +3,6 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
-use rand::Rng;
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Layout, Rect},
@@ -13,385 +12,33 @@ use ratatui::{
     Frame, Terminal,
 };
 use std::{
-    collections::VecDeque,
     io::{self, stdout},
     time::{Duration, Instant},
 };
 
+use tetris::game::{CellState, Game, GameState, TetrominoType, GRID_HEIGHT, GRID_WIDTH, PREVIEW_COUNT};
+
 // ============================================================================
-// Configuration
+// Visual Constants
 // ============================================================================
 
-const GRID_WIDTH: usize = 10;
-const GRID_HEIGHT: usize = 20;
-const PREVIEW_COUNT: usize = 4;
-
-// Timing (in milliseconds)
-const BASE_TICK_MS: u64 = 800;
-const MIN_TICK_MS: u64 = 100;
-const SPEED_INCREASE_PER_LEVEL: u64 = 50;
-const LINES_PER_LEVEL: u32 = 10;
-
-// Scoring
-const SCORE_SINGLE: u32 = 100;
-const SCORE_DOUBLE: u32 = 300;
-const SCORE_TRIPLE: u32 = 500;
-const SCORE_TETRIS: u32 = 800;
-
-// Visual
 const CELL_WIDTH: u16 = 2;
 const BLOCK_CHAR: &str = "██";
 const EMPTY_CHAR: &str = "  ";
 
 // ============================================================================
-// Types
+// Color Mapping
 // ============================================================================
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-struct Position {
-    x: i16,
-    y: i16,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum TetrominoType {
-    I,
-    O,
-    T,
-    S,
-    Z,
-    J,
-    L,
-}
-
-impl TetrominoType {
-    fn color(&self) -> Color {
-        match self {
-            TetrominoType::I => Color::Cyan,
-            TetrominoType::O => Color::Yellow,
-            TetrominoType::T => Color::Magenta,
-            TetrominoType::S => Color::Green,
-            TetrominoType::Z => Color::Red,
-            TetrominoType::J => Color::Blue,
-            TetrominoType::L => Color::Rgb(255, 165, 0), // Orange
-        }
-    }
-
-    fn shapes(&self) -> Vec<Vec<(i16, i16)>> {
-        match self {
-            TetrominoType::I => vec![
-                vec![(0, 0), (1, 0), (2, 0), (3, 0)],
-                vec![(0, 0), (0, 1), (0, 2), (0, 3)],
-                vec![(0, 0), (1, 0), (2, 0), (3, 0)],
-                vec![(0, 0), (0, 1), (0, 2), (0, 3)],
-            ],
-            TetrominoType::O => vec![
-                vec![(0, 0), (1, 0), (0, 1), (1, 1)],
-                vec![(0, 0), (1, 0), (0, 1), (1, 1)],
-                vec![(0, 0), (1, 0), (0, 1), (1, 1)],
-                vec![(0, 0), (1, 0), (0, 1), (1, 1)],
-            ],
-            TetrominoType::T => vec![
-                vec![(1, 0), (0, 1), (1, 1), (2, 1)],
-                vec![(0, 0), (0, 1), (1, 1), (0, 2)],
-                vec![(0, 0), (1, 0), (2, 0), (1, 1)],
-                vec![(1, 0), (0, 1), (1, 1), (1, 2)],
-            ],
-            TetrominoType::S => vec![
-                vec![(1, 0), (2, 0), (0, 1), (1, 1)],
-                vec![(0, 0), (0, 1), (1, 1), (1, 2)],
-                vec![(1, 0), (2, 0), (0, 1), (1, 1)],
-                vec![(0, 0), (0, 1), (1, 1), (1, 2)],
-            ],
-            TetrominoType::Z => vec![
-                vec![(0, 0), (1, 0), (1, 1), (2, 1)],
-                vec![(1, 0), (0, 1), (1, 1), (0, 2)],
-                vec![(0, 0), (1, 0), (1, 1), (2, 1)],
-                vec![(1, 0), (0, 1), (1, 1), (0, 2)],
-            ],
-            TetrominoType::J => vec![
-                vec![(0, 0), (0, 1), (1, 1), (2, 1)],
-                vec![(0, 0), (1, 0), (0, 1), (0, 2)],
-                vec![(0, 0), (1, 0), (2, 0), (2, 1)],
-                vec![(1, 0), (1, 1), (0, 2), (1, 2)],
-            ],
-            TetrominoType::L => vec![
-                vec![(2, 0), (0, 1), (1, 1), (2, 1)],
-                vec![(0, 0), (0, 1), (0, 2), (1, 2)],
-                vec![(0, 0), (1, 0), (2, 0), (0, 1)],
-                vec![(0, 0), (1, 0), (1, 1), (1, 2)],
-            ],
-        }
-    }
-
-    fn random() -> Self {
-        let mut rng = rand::thread_rng();
-        match rng.gen_range(0..7) {
-            0 => TetrominoType::I,
-            1 => TetrominoType::O,
-            2 => TetrominoType::T,
-            3 => TetrominoType::S,
-            4 => TetrominoType::Z,
-            5 => TetrominoType::J,
-            _ => TetrominoType::L,
-        }
-    }
-}
-
-#[derive(Clone)]
-struct Tetromino {
-    tetromino_type: TetrominoType,
-    position: Position,
-    rotation: usize,
-}
-
-impl Tetromino {
-    fn new(tetromino_type: TetrominoType) -> Self {
-        Self {
-            tetromino_type,
-            position: Position {
-                x: (GRID_WIDTH as i16 / 2) - 1,
-                y: 0,
-            },
-            rotation: 0,
-        }
-    }
-
-    fn blocks(&self) -> Vec<Position> {
-        let shapes = self.tetromino_type.shapes();
-        let shape = &shapes[self.rotation % shapes.len()];
-        shape
-            .iter()
-            .map(|(dx, dy)| Position {
-                x: self.position.x + dx,
-                y: self.position.y + dy,
-            })
-            .collect()
-    }
-
-    fn rotated(&self, clockwise: bool) -> Self {
-        let shapes = self.tetromino_type.shapes();
-        let rotation = if clockwise {
-            (self.rotation + 1) % shapes.len()
-        } else {
-            (self.rotation + shapes.len() - 1) % shapes.len()
-        };
-        Self {
-            tetromino_type: self.tetromino_type,
-            position: self.position,
-            rotation,
-        }
-    }
-
-    fn moved(&self, dx: i16, dy: i16) -> Self {
-        Self {
-            tetromino_type: self.tetromino_type,
-            position: Position {
-                x: self.position.x + dx,
-                y: self.position.y + dy,
-            },
-            rotation: self.rotation,
-        }
-    }
-
-    fn color(&self) -> Color {
-        self.tetromino_type.color()
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum CellState {
-    Empty,
-    Filled(Color),
-}
-
-enum GameState {
-    Playing,
-    GameOver,
-}
-
-struct Game {
-    grid: Vec<Vec<CellState>>,
-    current_piece: Tetromino,
-    preview_queue: VecDeque<TetrominoType>,
-    score: u32,
-    lines_cleared: u32,
-    level: u32,
-    state: GameState,
-}
-
-// ============================================================================
-// Game Logic
-// ============================================================================
-
-impl Game {
-    fn new() -> Self {
-        let grid = vec![vec![CellState::Empty; GRID_WIDTH]; GRID_HEIGHT];
-
-        let mut preview_queue = VecDeque::new();
-        for _ in 0..PREVIEW_COUNT {
-            preview_queue.push_back(TetrominoType::random());
-        }
-
-        let current_type = TetrominoType::random();
-        let current_piece = Tetromino::new(current_type);
-
-        Self {
-            grid,
-            current_piece,
-            preview_queue,
-            score: 0,
-            lines_cleared: 0,
-            level: 1,
-            state: GameState::Playing,
-        }
-    }
-
-    fn is_valid_position(&self, piece: &Tetromino) -> bool {
-        for block in piece.blocks() {
-            // Check bounds
-            if block.x < 0 || block.x >= GRID_WIDTH as i16 {
-                return false;
-            }
-            if block.y < 0 || block.y >= GRID_HEIGHT as i16 {
-                return false;
-            }
-            // Check collision with placed blocks
-            if self.grid[block.y as usize][block.x as usize] != CellState::Empty {
-                return false;
-            }
-        }
-        true
-    }
-
-    fn lock_piece(&mut self) {
-        let color = self.current_piece.color();
-        for block in self.current_piece.blocks() {
-            if block.y >= 0 && block.y < GRID_HEIGHT as i16 {
-                self.grid[block.y as usize][block.x as usize] = CellState::Filled(color);
-            }
-        }
-    }
-
-    fn clear_lines(&mut self) -> u32 {
-        let mut lines_to_clear = Vec::new();
-
-        for y in 0..GRID_HEIGHT {
-            if self.grid[y].iter().all(|cell| *cell != CellState::Empty) {
-                lines_to_clear.push(y);
-            }
-        }
-
-        let cleared_count = lines_to_clear.len() as u32;
-
-        // Remove cleared lines from bottom to top
-        for &y in lines_to_clear.iter().rev() {
-            self.grid.remove(y);
-            self.grid.insert(0, vec![CellState::Empty; GRID_WIDTH]);
-        }
-
-        cleared_count
-    }
-
-    fn add_score(&mut self, lines: u32) {
-        let base_score = match lines {
-            1 => SCORE_SINGLE,
-            2 => SCORE_DOUBLE,
-            3 => SCORE_TRIPLE,
-            4 => SCORE_TETRIS,
-            _ => 0,
-        };
-        self.score += base_score * self.level;
-        self.lines_cleared += lines;
-
-        // Level up
-        let new_level = (self.lines_cleared / LINES_PER_LEVEL) + 1;
-        if new_level > self.level {
-            self.level = new_level;
-        }
-    }
-
-    fn spawn_next_piece(&mut self) {
-        // Get next piece from queue
-        let next_type = self.preview_queue.pop_front().unwrap_or_else(TetrominoType::random);
-        self.preview_queue.push_back(TetrominoType::random());
-
-        self.current_piece = Tetromino::new(next_type);
-
-        // Check if new piece can be placed
-        if !self.is_valid_position(&self.current_piece) {
-            self.state = GameState::GameOver;
-        }
-    }
-
-    fn move_piece(&mut self, dx: i16, dy: i16) -> bool {
-        let moved = self.current_piece.moved(dx, dy);
-        if self.is_valid_position(&moved) {
-            self.current_piece = moved;
-            true
-        } else {
-            false
-        }
-    }
-
-    fn rotate_piece(&mut self, clockwise: bool) {
-        let rotated = self.current_piece.rotated(clockwise);
-        if self.is_valid_position(&rotated) {
-            self.current_piece = rotated;
-            return;
-        }
-
-        // Wall kick attempts
-        let kicks = [(1, 0), (-1, 0), (0, -1), (2, 0), (-2, 0)];
-        for (dx, dy) in kicks {
-            let kicked = Tetromino {
-                position: Position {
-                    x: rotated.position.x + dx,
-                    y: rotated.position.y + dy,
-                },
-                ..rotated.clone()
-            };
-            if self.is_valid_position(&kicked) {
-                self.current_piece = kicked;
-                return;
-            }
-        }
-    }
-
-    fn hard_drop(&mut self) {
-        while self.move_piece(0, 1) {}
-        self.lock_and_spawn();
-    }
-
-    fn soft_drop(&mut self) {
-        if !self.move_piece(0, 1) {
-            self.lock_and_spawn();
-        }
-    }
-
-    fn lock_and_spawn(&mut self) {
-        self.lock_piece();
-        let lines = self.clear_lines();
-        if lines > 0 {
-            self.add_score(lines);
-        }
-        self.spawn_next_piece();
-    }
-
-    fn tick(&mut self) {
-        if !matches!(self.state, GameState::Playing) {
-            return;
-        }
-
-        if !self.move_piece(0, 1) {
-            self.lock_and_spawn();
-        }
-    }
-
-    fn tick_duration(&self) -> Duration {
-        let speed_reduction = (self.level - 1) as u64 * SPEED_INCREASE_PER_LEVEL;
-        let tick_ms = BASE_TICK_MS.saturating_sub(speed_reduction).max(MIN_TICK_MS);
-        Duration::from_millis(tick_ms)
+fn tetromino_color(t: TetrominoType) -> Color {
+    match t {
+        TetrominoType::I => Color::Cyan,
+        TetrominoType::O => Color::Yellow,
+        TetrominoType::T => Color::Magenta,
+        TetrominoType::S => Color::Green,
+        TetrominoType::Z => Color::Red,
+        TetrominoType::J => Color::Blue,
+        TetrominoType::L => Color::Rgb(255, 165, 0),
     }
 }
 
@@ -455,9 +102,9 @@ fn render_game(frame: &mut Frame, game: &Game, area: Rect) {
     };
 
     if controls_area.y + 1 < area.height {
-        let controls = Paragraph::new(vec![
-            Line::from("WASD/JK: Move/Drop | ←→/HL: Rotate | Q/ESC: Quit"),
-        ])
+        let controls = Paragraph::new(vec![Line::from(
+            "WASD/JK: Move/Drop | ←→/HL: Rotate | Q/ESC: Quit",
+        )])
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::DarkGray));
         frame.render_widget(controls, controls_area);
@@ -473,9 +120,9 @@ fn render_grid(frame: &mut Frame, game: &Game, area: Rect) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    // Get current piece blocks for highlighting
-    let current_blocks: Vec<Position> = game.current_piece.blocks();
-    let current_color = game.current_piece.color();
+    // Get the complete visual grid state from game logic
+    // This ensures rendering always matches game state
+    let visual_grid = game.render_grid();
 
     // Build grid display
     let mut lines: Vec<Line> = Vec::new();
@@ -484,17 +131,10 @@ fn render_grid(frame: &mut Frame, game: &Game, area: Rect) {
         let mut spans: Vec<Span> = Vec::new();
 
         for x in 0..GRID_WIDTH {
-            let pos = Position {
-                x: x as i16,
-                y: y as i16,
-            };
-
-            let (symbol, style) = if current_blocks.contains(&pos) {
-                (BLOCK_CHAR, Style::default().fg(current_color))
-            } else {
-                match game.grid[y][x] {
-                    CellState::Empty => (EMPTY_CHAR, Style::default()),
-                    CellState::Filled(color) => (BLOCK_CHAR, Style::default().fg(color)),
+            let (symbol, style) = match visual_grid[y][x] {
+                CellState::Empty => (EMPTY_CHAR, Style::default()),
+                CellState::Filled(piece_type) => {
+                    (BLOCK_CHAR, Style::default().fg(tetromino_color(piece_type)))
                 }
             };
 
@@ -526,7 +166,7 @@ fn render_preview(frame: &mut Frame, game: &Game, area: Rect) {
 
         let shapes = tetromino_type.shapes();
         let shape = &shapes[0];
-        let color = tetromino_type.color();
+        let color = tetromino_color(tetromino_type);
 
         // Find bounding box
         let max_y = shape.iter().map(|(_, y)| *y).max().unwrap_or(0);
@@ -583,10 +223,7 @@ fn render_game_over(frame: &mut Frame, game: &Game, area: Rect) {
     // Then overlay game over popup
     let text = vec![
         Line::from(""),
-        Line::from(Span::styled(
-            "GAME OVER",
-            Style::default().fg(Color::Red),
-        )),
+        Line::from(Span::styled("GAME OVER", Style::default().fg(Color::Red))),
         Line::from(""),
         Line::from(format!("Score: {}", game.score)),
         Line::from(format!("Lines: {}", game.lines_cleared)),
@@ -598,15 +235,13 @@ fn render_game_over(frame: &mut Frame, game: &Game, area: Rect) {
         )),
     ];
 
-    let paragraph = Paragraph::new(text)
-        .alignment(Alignment::Center)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(" Game Over ")
-                .title_alignment(Alignment::Center)
-                .style(Style::default().bg(Color::Black)),
-        );
+    let paragraph = Paragraph::new(text).alignment(Alignment::Center).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Game Over ")
+            .title_alignment(Alignment::Center)
+            .style(Style::default().bg(Color::Black)),
+    );
 
     let popup_area = centered_rect(24, 12, area);
     frame.render_widget(paragraph, popup_area);
@@ -651,7 +286,7 @@ fn main() -> io::Result<()> {
         terminal.draw(|frame| render(frame, &game))?;
 
         // Calculate time until next tick
-        let tick_duration = game.tick_duration();
+        let tick_duration = Duration::from_millis(game.tick_duration_ms());
         let timeout = tick_duration
             .checked_sub(last_tick.elapsed())
             .unwrap_or(Duration::ZERO);
@@ -668,10 +303,12 @@ fn main() -> io::Result<()> {
                         KeyCode::Char('d') | KeyCode::Char('D') => {
                             game.move_piece(1, 0);
                         }
-                        KeyCode::Char('s') | KeyCode::Char('S') | KeyCode::Char('j') | KeyCode::Char('J') => {
+                        KeyCode::Char('s') | KeyCode::Char('S')
+                        | KeyCode::Char('j') | KeyCode::Char('J') => {
                             game.soft_drop();
                         }
-                        KeyCode::Char('w') | KeyCode::Char('W') | KeyCode::Char('k') | KeyCode::Char('K') => {
+                        KeyCode::Char('w') | KeyCode::Char('W')
+                        | KeyCode::Char('k') | KeyCode::Char('K') => {
                             game.hard_drop();
                         }
                         KeyCode::Left | KeyCode::Char('h') | KeyCode::Char('H') => {
