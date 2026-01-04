@@ -322,20 +322,18 @@ impl Game {
     }
 
     pub fn clear_lines(&mut self) -> u32 {
-        let mut lines_to_clear = Vec::new();
+        let mut cleared_count = 0;
+        let mut y = 0;
 
-        for y in 0..GRID_HEIGHT {
+        while y < GRID_HEIGHT {
             if self.grid[y].iter().all(|cell| *cell != CellState::Empty) {
-                lines_to_clear.push(y);
+                self.grid.remove(y);
+                self.grid.insert(0, vec![CellState::Empty; GRID_WIDTH]);
+                cleared_count += 1;
+                // Don't increment y - the next row has shifted into this position
+            } else {
+                y += 1;
             }
-        }
-
-        let cleared_count = lines_to_clear.len() as u32;
-
-        // Remove cleared lines from bottom to top
-        for &y in lines_to_clear.iter().rev() {
-            self.grid.remove(y);
-            self.grid.insert(0, vec![CellState::Empty; GRID_WIDTH]);
         }
 
         if cleared_count > 0 {
