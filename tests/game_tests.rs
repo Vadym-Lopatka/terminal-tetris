@@ -13,6 +13,7 @@ use tetris::game::{
     SequencePieceProvider, Tetromino, TetrominoType, GRID_HEIGHT, GRID_WIDTH, LINES_PER_LEVEL,
     PREVIEW_COUNT, SCORE_DOUBLE, SCORE_SINGLE, SCORE_TETRIS, SCORE_TRIPLE,
 };
+use serial_test::serial;
 
 // ============================================================================
 // Piece Movement Tests
@@ -1170,5 +1171,146 @@ mod restart {
 
         // Game should still be playing (not immediately game over)
         assert_eq!(game.state, GameState::Playing);
+    }
+}
+
+// ============================================================================
+// High Score Tests
+// ============================================================================
+
+mod high_score {
+    use super::*;
+
+    // Helper to clean up high score file after tests
+    fn cleanup_high_score_file() {
+        let _ = std::fs::remove_file("highscore.txt");
+    }
+
+    #[test]
+    #[serial]
+    fn high_score_initializes_to_zero_when_no_file() {
+        cleanup_high_score_file();
+        let game = Game::new();
+        assert_eq!(game.high_score, 0);
+        cleanup_high_score_file();
+    }
+
+    #[test]
+    #[serial]
+    fn high_score_loads_from_file() {
+        cleanup_high_score_file();
+        std::fs::write("highscore.txt", "5000").unwrap();
+
+        let game = Game::new();
+
+        assert_eq!(game.high_score, 5000);
+        cleanup_high_score_file();
+    }
+
+    #[test]
+    #[serial]
+    fn high_score_updates_on_game_over_when_beaten() {
+        cleanup_high_score_file();
+        std::fs::write("highscore.txt", "1000").unwrap();
+
+        let mut grid = empty_grid();
+        // Fill the spawn area to trigger game over
+        for x in 0..GRID_WIDTH {
+            grid[0][x] = CellState::Filled(TetrominoType::T);
+            grid[1][x] = CellState::Filled(TetrominoType::T);
+        }
+
+        let piece = Tetromino::new_at(TetrominoType::O, 4, 10);
+        let mut game = Game::with_grid(grid, piece);
+        game.score = 2000; // Set score higher than high score
+
+        game.spawn_next_piece(); // This will trigger game over
+
+        assert_eq!(game.state, GameState::GameOver);
+        assert_eq!(game.high_score, 2000);
+
+        // Verify file was updated
+        let saved_score = std::fs::read_to_string("highscore.txt")
+            .unwrap()
+            .trim()
+            .parse::<u32>()
+            .unwrap();
+        assert_eq!(saved_score, 2000);
+
+        cleanup_high_score_file();
+    }
+
+    #[test]
+    #[serial]
+    fn high_score_does_not_update_when_not_beaten() {
+        cleanup_high_score_file();
+        std::fs::write("highscore.txt", "5000").unwrap();
+
+        let mut grid = empty_grid();
+        // Fill the spawn area to trigger game over
+        for x in 0..GRID_WIDTH {
+            grid[0][x] = CellState::Filled(TetrominoType::T);
+            grid[1][x] = CellState::Filled(TetrominoType::T);
+        }
+
+        let piece = Tetromino::new_at(TetrominoType::O, 4, 10);
+        let mut game = Game::with_grid(grid, piece);
+        game.score = 3000; // Set score lower than high score
+
+        game.spawn_next_piece(); // This will trigger game over
+
+        assert_eq!(game.state, GameState::GameOver);
+        assert_eq!(game.high_score, 5000); // Should remain 5000
+
+        // Verify file was not changed
+        let saved_score = std::fs::read_to_string("highscore.txt")
+            .unwrap()
+            .trim()
+            .parse::<u32>()
+            .unwrap();
+        assert_eq!(saved_score, 5000);
+
+        cleanup_high_score_file();
+    }
+
+    #[test]
+    #[serial]
+    fn high_score_persists_across_game_restarts() {
+        cleanup_high_score_file();
+
+        // First game session - set high score
+        {
+            let mut grid = empty_grid();
+            for x in 0..GRID_WIDTH {
+                grid[0][x] = CellState::Filled(TetrominoType::T);
+                grid[1][x] = CellState::Filled(TetrominoType::T);
+            }
+
+            let piece = Tetromino::new_at(TetrominoType::O, 4, 10);
+            let mut game = Game::with_grid(grid, piece);
+            game.score = 8000;
+            game.spawn_next_piece(); // Game over, saves high score
+        }
+
+        // Second game session - verify high score loaded
+        {
+            let game = Game::new();
+            assert_eq!(game.high_score, 8000);
+        }
+
+        cleanup_high_score_file();
+    }
+
+    #[test]
+    #[serial]
+    fn high_score_handles_invalid_file_content() {
+        cleanup_high_score_file();
+        std::fs::write("highscore.txt", "not_a_number").unwrap();
+
+        let game = Game::new();
+
+        // Should default to 0 if file contains invalid data
+        assert_eq!(game.high_score, 0);
+        cleanup_high_score_file();
     }
 }

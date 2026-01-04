@@ -203,6 +203,9 @@ fn render_info(frame: &mut Frame, game: &Game, area: Rect) {
 
     let lines = vec![
         Line::from(""),
+        Line::from(Span::styled("High Score", Style::default().fg(Color::Magenta))),
+        Line::from(format!("{}", game.high_score)),
+        Line::from(""),
         Line::from(Span::styled("Score", Style::default().fg(Color::Yellow))),
         Line::from(format!("{}", game.score)),
         Line::from(""),

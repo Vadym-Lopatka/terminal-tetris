@@ -241,6 +241,7 @@ pub struct Game {
     pub score: u32,
     pub lines_cleared: u32,
     pub level: u32,
+    pub high_score: u32,
     pub state: GameState,
     piece_provider: Box<dyn PieceProvider>,
     events: Vec<GameEvent>,
@@ -249,6 +250,19 @@ pub struct Game {
 // ============================================================================
 // Game Logic
 // ============================================================================
+
+const HIGH_SCORE_FILE: &str = "highscore.txt";
+
+fn load_high_score() -> u32 {
+    std::fs::read_to_string(HIGH_SCORE_FILE)
+        .ok()
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(0)
+}
+
+fn save_high_score(score: u32) {
+    let _ = std::fs::write(HIGH_SCORE_FILE, score.to_string());
+}
 
 impl Game {
     pub fn new() -> Self {
@@ -273,6 +287,7 @@ impl Game {
             score: 0,
             lines_cleared: 0,
             level: 1,
+            high_score: load_high_score(),
             state: GameState::Playing,
             piece_provider: provider,
             events: Vec::new(),
@@ -292,6 +307,7 @@ impl Game {
             score: 0,
             lines_cleared: 0,
             level: 1,
+            high_score: load_high_score(),
             state: GameState::Playing,
             piece_provider: Box::new(RandomPieceProvider),
             events: Vec::new(),
@@ -377,6 +393,12 @@ impl Game {
         if !self.is_valid_position(&self.current_piece) {
             self.state = GameState::GameOver;
             self.events.push(GameEvent::GameOver);
+
+            // Update and save high score if beaten
+            if self.score > self.high_score {
+                self.high_score = self.score;
+                save_high_score(self.high_score);
+            }
         }
     }
 
