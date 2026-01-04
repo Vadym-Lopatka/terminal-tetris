@@ -328,29 +328,37 @@ fn main() -> io::Result<()> {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
                     match key.code {
+                        // Always allow quit
                         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => break,
+                        // Always allow pause/unpause toggle
                         KeyCode::Char('p') | KeyCode::Char('P') => {
                             game.toggle_pause();
                         }
-                        KeyCode::Char('a') | KeyCode::Char('A') => {
-                            game.move_piece(-1, 0);
-                        }
-                        KeyCode::Char('d') | KeyCode::Char('D') => {
-                            game.move_piece(1, 0);
-                        }
-                        KeyCode::Char('s') | KeyCode::Char('S')
-                        | KeyCode::Char('j') | KeyCode::Char('J') => {
-                            game.soft_drop();
-                        }
-                        KeyCode::Char('w') | KeyCode::Char('W')
-                        | KeyCode::Char('k') | KeyCode::Char('K') => {
-                            game.hard_drop();
-                        }
-                        KeyCode::Left | KeyCode::Char('h') | KeyCode::Char('H') => {
-                            game.rotate_piece(false); // Counter-clockwise
-                        }
-                        KeyCode::Right | KeyCode::Char('l') | KeyCode::Char('L') => {
-                            game.rotate_piece(true); // Clockwise
+                        // Only process game controls when playing
+                        _ if game.state == GameState::Playing => {
+                            match key.code {
+                                KeyCode::Char('a') | KeyCode::Char('A') => {
+                                    game.move_piece(-1, 0);
+                                }
+                                KeyCode::Char('d') | KeyCode::Char('D') => {
+                                    game.move_piece(1, 0);
+                                }
+                                KeyCode::Char('s') | KeyCode::Char('S')
+                                | KeyCode::Char('j') | KeyCode::Char('J') => {
+                                    game.soft_drop();
+                                }
+                                KeyCode::Char('w') | KeyCode::Char('W')
+                                | KeyCode::Char('k') | KeyCode::Char('K') => {
+                                    game.hard_drop();
+                                }
+                                KeyCode::Left | KeyCode::Char('h') | KeyCode::Char('H') => {
+                                    game.rotate_piece(false); // Counter-clockwise
+                                }
+                                KeyCode::Right | KeyCode::Char('l') | KeyCode::Char('L') => {
+                                    game.rotate_piece(true); // Clockwise
+                                }
+                                _ => {}
+                            }
                         }
                         _ => {}
                     }

@@ -424,6 +424,9 @@ impl Game {
     }
 
     pub fn hard_drop(&mut self) {
+        if self.state != GameState::Playing {
+            return;
+        }
         while self.move_piece(0, 1) {}
         // Remove the PieceMoved events from the hard drop moves (optional, but cleaner)
         self.events.retain(|e| *e != GameEvent::PieceMoved);
@@ -431,6 +434,9 @@ impl Game {
     }
 
     pub fn soft_drop(&mut self) {
+        if self.state != GameState::Playing {
+            return;
+        }
         if !self.move_piece(0, 1) {
             self.lock_and_spawn();
         }

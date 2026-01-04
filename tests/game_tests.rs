@@ -994,4 +994,51 @@ mod pause {
         game.toggle_pause();
         assert_eq!(game.state, GameState::Paused);
     }
+
+    #[test]
+    fn no_move_events_when_paused() {
+        let piece = Tetromino::new_at(TetrominoType::O, 4, 5);
+        let mut game = Game::with_grid(empty_grid(), piece);
+        game.toggle_pause();
+        game.take_events(); // Clear pause event
+
+        game.move_piece(-1, 0);
+        game.move_piece(1, 0);
+        game.move_piece(0, 1);
+
+        let events = game.take_events();
+        assert!(events.is_empty());
+        assert!(!events.contains(&GameEvent::PieceMoved));
+    }
+
+    #[test]
+    fn no_rotation_events_when_paused() {
+        let piece = Tetromino::new_at(TetrominoType::T, 4, 5);
+        let mut game = Game::with_grid(empty_grid(), piece);
+        game.toggle_pause();
+        game.take_events(); // Clear pause event
+
+        game.rotate_piece(true);
+        game.rotate_piece(false);
+
+        let events = game.take_events();
+        assert!(events.is_empty());
+        assert!(!events.contains(&GameEvent::PieceRotated));
+    }
+
+    #[test]
+    fn no_drop_events_when_paused() {
+        let piece = Tetromino::new_at(TetrominoType::O, 4, 0);
+        let mut game = Game::with_grid(empty_grid(), piece);
+        game.toggle_pause();
+        game.take_events(); // Clear pause event
+
+        game.soft_drop();
+        game.hard_drop();
+
+        let events = game.take_events();
+        assert!(events.is_empty());
+        assert!(!events.contains(&GameEvent::PieceMoved));
+        assert!(!events.contains(&GameEvent::PieceLocked));
+    }
 }
