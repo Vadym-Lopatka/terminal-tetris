@@ -11,7 +11,7 @@
 use tetris::game::{
     test_helpers::*, CellState, Game, GameEvent, GameState, PieceProvider, Position,
     SequencePieceProvider, Tetromino, TetrominoType, GRID_HEIGHT, GRID_WIDTH, LINES_PER_LEVEL,
-    SCORE_DOUBLE, SCORE_SINGLE, SCORE_TETRIS, SCORE_TRIPLE,
+    PREVIEW_COUNT, SCORE_DOUBLE, SCORE_SINGLE, SCORE_TETRIS, SCORE_TRIPLE,
 };
 
 // ============================================================================
@@ -1040,5 +1040,135 @@ mod pause {
         assert!(events.is_empty());
         assert!(!events.contains(&GameEvent::PieceMoved));
         assert!(!events.contains(&GameEvent::PieceLocked));
+    }
+}
+
+// ============================================================================
+// Restart Tests
+// ============================================================================
+
+mod restart {
+    use super::*;
+
+    #[test]
+    fn restart_resets_score() {
+        let mut game = Game::new();
+        game.score = 5000;
+        game.state = GameState::GameOver;
+
+        game.restart();
+
+        assert_eq!(game.score, 0);
+    }
+
+    #[test]
+    fn restart_resets_lines_and_level() {
+        let mut game = Game::new();
+        game.lines_cleared = 50;
+        game.level = 6;
+        game.state = GameState::GameOver;
+
+        game.restart();
+
+        assert_eq!(game.lines_cleared, 0);
+        assert_eq!(game.level, 1);
+    }
+
+    #[test]
+    fn restart_clears_grid() {
+        let mut grid = empty_grid();
+        // Fill some cells
+        grid[GRID_HEIGHT - 1][0] = CellState::Filled(TetrominoType::T);
+        grid[GRID_HEIGHT - 1][1] = CellState::Filled(TetrominoType::T);
+
+        let piece = Tetromino::new_at(TetrominoType::O, 4, 0);
+        let mut game = Game::with_grid(grid, piece);
+        game.state = GameState::GameOver;
+
+        game.restart();
+
+        // Grid should be empty
+        for row in &game.grid {
+            for cell in row {
+                assert_eq!(*cell, CellState::Empty);
+            }
+        }
+    }
+
+    #[test]
+    fn restart_sets_state_to_playing() {
+        let mut game = Game::new();
+        game.state = GameState::GameOver;
+
+        game.restart();
+
+        assert_eq!(game.state, GameState::Playing);
+    }
+
+    #[test]
+    fn restart_emits_event() {
+        let mut game = Game::new();
+        game.state = GameState::GameOver;
+        game.take_events();
+
+        game.restart();
+
+        let events = game.take_events();
+        assert!(events.contains(&GameEvent::GameRestarted));
+    }
+
+    #[test]
+    fn restart_spawns_new_piece() {
+        let mut game = Game::new();
+        game.state = GameState::GameOver;
+
+        game.restart();
+
+        // New piece should be spawned at spawn position
+        assert_eq!(game.current_piece.position.x, (GRID_WIDTH as i16 / 2) - 1);
+        assert_eq!(game.current_piece.position.y, 0);
+    }
+
+    #[test]
+    fn restart_with_deterministic_provider() {
+        // Test with known piece sequence to verify provider is preserved
+        let pieces = vec![
+            TetrominoType::T,
+            TetrominoType::O,
+            TetrominoType::I,
+            TetrominoType::L,
+            TetrominoType::J,
+            TetrominoType::S,
+            TetrominoType::Z,
+        ];
+        let provider = Box::new(SequencePieceProvider::new(pieces));
+        let mut game = Game::with_provider(provider);
+
+        // Use up first 5 pieces (4 for preview + 1 current)
+        game.state = GameState::GameOver;
+
+        game.restart();
+
+        // After restart, should get new pieces from the same provider
+        assert_eq!(game.state, GameState::Playing);
+        assert_eq!(game.preview_queue.len(), PREVIEW_COUNT);
+    }
+
+    #[test]
+    fn restart_game_can_be_played() {
+        let mut game = Game::new();
+        game.state = GameState::GameOver;
+
+        game.restart();
+
+        // Should be able to move pieces after restart
+        game.move_piece(1, 0);
+        // May or may not move depending on piece type and boundaries
+
+        // Should be able to tick
+        game.tick();
+
+        // Game should still be playing (not immediately game over)
+        assert_eq!(game.state, GameState::Playing);
     }
 }

@@ -191,6 +191,7 @@ pub enum GameEvent {
     LevelUp(u32),
     Paused,
     Unpaused,
+    GameRestarted,
     GameOver,
 }
 
@@ -475,6 +476,35 @@ impl Game {
                 // Cannot pause when game is over
             }
         }
+    }
+
+    pub fn restart(&mut self) {
+        // Clear the grid
+        self.grid = vec![vec![CellState::Empty; GRID_WIDTH]; GRID_HEIGHT];
+
+        // Reset score, lines, and level
+        self.score = 0;
+        self.lines_cleared = 0;
+        self.level = 1;
+
+        // Reset state to Playing
+        self.state = GameState::Playing;
+
+        // Clear events
+        self.events.clear();
+
+        // Rebuild preview queue with new pieces
+        self.preview_queue.clear();
+        for _ in 0..PREVIEW_COUNT {
+            self.preview_queue.push_back(self.piece_provider.next_piece());
+        }
+
+        // Spawn new current piece
+        let current_type = self.piece_provider.next_piece();
+        self.current_piece = Tetromino::new(current_type);
+
+        // Emit restart event
+        self.events.push(GameEvent::GameRestarted);
     }
 
     pub fn tick_duration_ms(&self) -> u64 {

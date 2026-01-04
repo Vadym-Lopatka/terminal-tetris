@@ -231,6 +231,10 @@ fn render_game_over(frame: &mut Frame, game: &Game, area: Rect) {
         Line::from(format!("Level: {}", game.level)),
         Line::from(""),
         Line::from(Span::styled(
+            "Press R to restart",
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(Span::styled(
             "Press ESC to quit",
             Style::default().fg(Color::DarkGray),
         )),
@@ -244,7 +248,7 @@ fn render_game_over(frame: &mut Frame, game: &Game, area: Rect) {
             .style(Style::default().bg(Color::Black)),
     );
 
-    let popup_area = centered_rect(24, 12, area);
+    let popup_area = centered_rect(24, 13, area);
     frame.render_widget(paragraph, popup_area);
 }
 
@@ -330,6 +334,10 @@ fn main() -> io::Result<()> {
                     match key.code {
                         // Always allow quit
                         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => break,
+                        // Restart only available when game is over
+                        KeyCode::Char('r') | KeyCode::Char('R') if game.state == GameState::GameOver => {
+                            game.restart();
+                        }
                         // Always allow pause/unpause toggle
                         KeyCode::Char('p') | KeyCode::Char('P') => {
                             game.toggle_pause();
