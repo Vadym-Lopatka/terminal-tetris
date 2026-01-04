@@ -51,6 +51,7 @@ fn render(frame: &mut Frame, game: &Game) {
 
     match game.state {
         GameState::Playing => render_game(frame, game, area),
+        GameState::Paused => render_paused(frame, game, area),
         GameState::GameOver => render_game_over(frame, game, area),
     }
 }
@@ -103,7 +104,7 @@ fn render_game(frame: &mut Frame, game: &Game, area: Rect) {
 
     if controls_area.y + 1 < area.height {
         let controls = Paragraph::new(vec![Line::from(
-            "WASD/JK: Move/Drop | ←→/HL: Rotate | Q/ESC: Quit",
+            "WASD/JK: Move/Drop | ←→/HL: Rotate | P: Pause | Q/ESC: Quit",
         )])
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::DarkGray));
@@ -247,6 +248,37 @@ fn render_game_over(frame: &mut Frame, game: &Game, area: Rect) {
     frame.render_widget(paragraph, popup_area);
 }
 
+fn render_paused(frame: &mut Frame, game: &Game, area: Rect) {
+    // First render the game in background
+    render_game(frame, game, area);
+
+    // Then overlay paused popup
+    let text = vec![
+        Line::from(""),
+        Line::from(Span::styled("PAUSED", Style::default().fg(Color::Yellow))),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Press P to continue",
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(Span::styled(
+            "Press ESC to quit",
+            Style::default().fg(Color::DarkGray),
+        )),
+    ];
+
+    let paragraph = Paragraph::new(text).alignment(Alignment::Center).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Paused ")
+            .title_alignment(Alignment::Center)
+            .style(Style::default().bg(Color::Black)),
+    );
+
+    let popup_area = centered_rect(24, 10, area);
+    frame.render_widget(paragraph, popup_area);
+}
+
 fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
     let horizontal = Layout::horizontal([
         Constraint::Fill(1),
@@ -297,6 +329,9 @@ fn main() -> io::Result<()> {
                 if key.kind == KeyEventKind::Press {
                     match key.code {
                         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => break,
+                        KeyCode::Char('p') | KeyCode::Char('P') => {
+                            game.toggle_pause();
+                        }
                         KeyCode::Char('a') | KeyCode::Char('A') => {
                             game.move_piece(-1, 0);
                         }

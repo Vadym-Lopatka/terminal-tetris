@@ -899,3 +899,99 @@ mod edge_cases {
         }
     }
 }
+
+// ============================================================================
+// Pause Tests
+// ============================================================================
+
+mod pause {
+    use super::*;
+
+    #[test]
+    fn pause_from_playing_state() {
+        let mut game = Game::new();
+        assert_eq!(game.state, GameState::Playing);
+        game.take_events();
+
+        game.toggle_pause();
+
+        assert_eq!(game.state, GameState::Paused);
+        let events = game.take_events();
+        assert!(events.contains(&GameEvent::Paused));
+    }
+
+    #[test]
+    fn unpause_from_paused_state() {
+        let mut game = Game::new();
+        game.toggle_pause(); // Pause first
+        game.take_events();
+
+        game.toggle_pause(); // Unpause
+
+        assert_eq!(game.state, GameState::Playing);
+        let events = game.take_events();
+        assert!(events.contains(&GameEvent::Unpaused));
+    }
+
+    #[test]
+    fn cannot_pause_when_game_over() {
+        let mut game = Game::new();
+        game.state = GameState::GameOver;
+
+        game.toggle_pause();
+
+        assert_eq!(game.state, GameState::GameOver);
+    }
+
+    #[test]
+    fn tick_does_nothing_when_paused() {
+        let piece = Tetromino::new_at(TetrominoType::O, 4, 5);
+        let mut game = Game::with_grid(empty_grid(), piece);
+        let initial_y = game.current_piece.position.y;
+
+        game.toggle_pause();
+        game.tick();
+
+        assert_eq!(game.current_piece.position.y, initial_y);
+    }
+
+    #[test]
+    fn cannot_move_piece_when_paused() {
+        let piece = Tetromino::new_at(TetrominoType::O, 4, 5);
+        let mut game = Game::with_grid(empty_grid(), piece);
+        let initial_x = game.current_piece.position.x;
+
+        game.toggle_pause();
+        let moved = game.move_piece(1, 0);
+
+        assert!(!moved);
+        assert_eq!(game.current_piece.position.x, initial_x);
+    }
+
+    #[test]
+    fn cannot_rotate_piece_when_paused() {
+        let piece = Tetromino::new_at(TetrominoType::T, 4, 5);
+        let mut game = Game::with_grid(empty_grid(), piece);
+        let initial_rotation = game.current_piece.rotation;
+
+        game.toggle_pause();
+        let rotated = game.rotate_piece(true);
+
+        assert!(!rotated);
+        assert_eq!(game.current_piece.rotation, initial_rotation);
+    }
+
+    #[test]
+    fn pause_and_unpause_multiple_times() {
+        let mut game = Game::new();
+
+        game.toggle_pause();
+        assert_eq!(game.state, GameState::Paused);
+
+        game.toggle_pause();
+        assert_eq!(game.state, GameState::Playing);
+
+        game.toggle_pause();
+        assert_eq!(game.state, GameState::Paused);
+    }
+}

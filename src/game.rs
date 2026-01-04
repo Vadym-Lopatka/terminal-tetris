@@ -178,6 +178,7 @@ pub enum CellState {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum GameState {
     Playing,
+    Paused,
     GameOver,
 }
 
@@ -188,6 +189,8 @@ pub enum GameEvent {
     PieceLocked,
     LinesCleared(u32),
     LevelUp(u32),
+    Paused,
+    Unpaused,
     GameOver,
 }
 
@@ -377,7 +380,7 @@ impl Game {
     }
 
     pub fn move_piece(&mut self, dx: i16, dy: i16) -> bool {
-        if self.state == GameState::GameOver {
+        if self.state != GameState::Playing {
             return false;
         }
         let moved = self.current_piece.moved(dx, dy);
@@ -391,7 +394,7 @@ impl Game {
     }
 
     pub fn rotate_piece(&mut self, clockwise: bool) -> bool {
-        if self.state == GameState::GameOver {
+        if self.state != GameState::Playing {
             return false;
         }
         let rotated = self.current_piece.rotated(clockwise);
@@ -449,6 +452,22 @@ impl Game {
 
         if !self.move_piece(0, 1) {
             self.lock_and_spawn();
+        }
+    }
+
+    pub fn toggle_pause(&mut self) {
+        match self.state {
+            GameState::Playing => {
+                self.state = GameState::Paused;
+                self.events.push(GameEvent::Paused);
+            }
+            GameState::Paused => {
+                self.state = GameState::Playing;
+                self.events.push(GameEvent::Unpaused);
+            }
+            GameState::GameOver => {
+                // Cannot pause when game is over
+            }
         }
     }
 
